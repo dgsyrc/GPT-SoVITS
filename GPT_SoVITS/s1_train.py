@@ -79,17 +79,15 @@ class my_model_ckpt(ModelCheckpoint):
                     to_save_od["config"] = self.config
                     to_save_od["info"] = "GPT-e%s" % (trainer.current_epoch + 1)
                     # torch.save(
-                    # print(os.environ)
-                    if(os.environ.get("LOCAL_RANK","0")=="0"):
-                        my_save(
-                            to_save_od,
-                            "%s/%s-e%s.ckpt"
-                            % (
-                                self.half_weights_save_dir,
-                                self.exp_name,
-                                trainer.current_epoch + 1,
-                            ),
-                        )
+                    my_save(
+                        to_save_od,
+                        "%s/%s-e%s.ckpt"
+                        % (
+                            self.half_weights_save_dir,
+                            self.exp_name,
+                            trainer.current_epoch + 1,
+                        ),
+                    )
             self._save_last_checkpoint(trainer, monitor_candidates)
 
 
@@ -134,7 +132,6 @@ def main(args):
         logger=logger,
         num_sanity_val_steps=0,
         callbacks=[ckpt_callback],
-        use_distributed_sampler=False,  # 非常简单的修改，但解决了采用自定义的 bucket_sampler 下训练步数不一致的问题！
     )
 
     model: Text2SemanticLightningModule = Text2SemanticLightningModule(

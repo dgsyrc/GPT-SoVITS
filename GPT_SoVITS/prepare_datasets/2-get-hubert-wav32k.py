@@ -6,20 +6,18 @@ inp_wav_dir=                        os.environ.get("inp_wav_dir")
 exp_name=                           os.environ.get("exp_name")
 i_part=                             os.environ.get("i_part")
 all_parts=                          os.environ.get("all_parts")
-if "_CUDA_VISIBLE_DEVICES" in os.environ:
-     os.environ["CUDA_VISIBLE_DEVICES"] = os.environ["_CUDA_VISIBLE_DEVICES"]
+os.environ["CUDA_VISIBLE_DEVICES"]= os.environ.get("_CUDA_VISIBLE_DEVICES")
 from feature_extractor import cnhubert
 opt_dir=                            os.environ.get("opt_dir")
 cnhubert.cnhubert_base_path=                os.environ.get("cnhubert_base_dir")
-import torch
-is_half = eval(os.environ.get("is_half", "True")) and torch.cuda.is_available()
+is_half=eval(os.environ.get("is_half","True"))
 
 import pdb,traceback,numpy as np,logging
 from scipy.io import wavfile
-import librosa
+import librosa,torch
 now_dir = os.getcwd()
 sys.path.append(now_dir)
-from tools.my_utils import load_audio,clean_path
+from my_utils import load_audio
 
 # from config import cnhubert_base_path
 # cnhubert.cnhubert_base_path=cnhubert_base_path
@@ -84,7 +82,7 @@ def name2go(wav_name,wav_path):
         tensor_wav16 = tensor_wav16.to(device)
     ssl=model.model(tensor_wav16.unsqueeze(0))["last_hidden_state"].transpose(1,2).cpu()#torch.Size([1, 768, 215])
     if np.isnan(ssl.detach().numpy()).sum()!= 0:
-        nan_fails.append((wav_name,wav_path))
+        nan_fails.append(wav_name)
         print("nan filtered:%s"%wav_name)
         return
     wavfile.write(
@@ -92,7 +90,7 @@ def name2go(wav_name,wav_path):
         32000,
         tmp_audio32.astype("int16"),
     )
-    my_save(ssl,hubert_path)
+    my_save(ssl,hubert_path )
 
 with open(inp_text,"r",encoding="utf8")as f:
     lines=f.read().strip("\n").split("\n")
@@ -101,7 +99,6 @@ for line in lines[int(i_part)::int(all_parts)]:
     try:
         # wav_name,text=line.split("\t")
         wav_name, spk_name, language, text = line.split("|")
-        wav_name=clean_path(wav_name)
         if (inp_wav_dir != "" and inp_wav_dir != None):
             wav_name = os.path.basename(wav_name)
             wav_path = "%s/%s"%(inp_wav_dir, wav_name)
@@ -116,8 +113,8 @@ for line in lines[int(i_part)::int(all_parts)]:
 if(len(nan_fails)>0 and is_half==True):
     is_half=False
     model=model.float()
-    for wav in nan_fails:
+    for wav_name in nan_fails:
         try:
-            name2go(wav[0],wav[1])
+            name2go(wav_name)
         except:
             print(wav_name,traceback.format_exc())

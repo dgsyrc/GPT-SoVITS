@@ -1,15 +1,36 @@
 import ast
-import glob
 import json
-import os
 from collections import OrderedDict
+import os
 
-I18N_JSON_DIR   : os.PathLike = os.path.join(os.path.dirname(os.path.relpath(__file__)), 'locale')
-DEFAULT_LANGUAGE: str         = "zh_CN" # 默认语言
-TITLE_LEN       : int         = 60      # 标题显示长度
-KEY_LEN         : int         = 30      # 键名显示长度
-SHOW_KEYS       : bool        = False   # 是否显示键信息
-SORT_KEYS       : bool        = False   # 是否按全局键名写入文件
+# locale_path = "./i18n/locale" # The path to the i18n locale directory, you can change it to your own path
+# scan_list = ["./",
+#              "GPT_SoVITS/",
+#              "tools/"
+#              ]  # The path to the directory you want to scan, you can change it to your own path
+# scan_subfolders = False  # Whether to scan subfolders
+
+locale_path = "./tools/srt_slicer/i18n/locale"
+scan_list = ["./tools/srt_slicer"]  # The path to the directory you want to scan, you can change it to your own path
+scan_subfolders = True
+
+special_words_to_keep = {
+    "auto": "自动判断",
+    "zh": "中文",
+    "en": "英文",
+    "ja": "日文",
+    "all_zh": "只有中文",
+    "all_ja": "只有日文",
+    "auto_cut": "智能切分",
+    "cut0": "仅凭换行切分",
+    "cut1": "凑四句一切",
+    "cut2": "凑50字一切",
+    "cut3": "按中文句号。切",
+    "cut4": "按英文句号.切",
+    "cut5": "按标点符号切",
+    
+}
+
 
 def extract_i18n_strings(node):
     i18n_strings = []
@@ -28,99 +49,75 @@ def extract_i18n_strings(node):
 
     return i18n_strings
 
-def scan_i18n_strings():
-    """
-    scan the directory for all .py files (recursively)
-    for each file, parse the code into an AST
-    for each AST, extract the i18n strings
-    """
-    strings = []
-    print(" Scanning Files and Extracting i18n Strings ".center(TITLE_LEN, "="))
-    for filename in glob.iglob("**/*.py", recursive=True):
-        with open(filename, "r", encoding="utf-8") as f:
-            code = f.read()
-            if "I18nAuto" in code:
-                tree = ast.parse(code)
-                i18n_strings = extract_i18n_strings(tree)
-                print(f"{filename.ljust(30)}: {len(i18n_strings)}")
-                strings.extend(i18n_strings)
+strings = []
 
-    code_keys = set(strings)
-    print(f"{'Total Unique'.ljust(30)}: {len(code_keys)}")
-    return code_keys
+# for each file, parse the code into an AST
+# for each AST, extract the i18n strings
+def scan_i18n_strings(filename):
+    with open(filename, "r", encoding="utf-8") as f:
+        code = f.read()
+        if "I18nAuto" in code:
+            tree = ast.parse(code)
+            i18n_strings = extract_i18n_strings(tree)
+            print(filename, len(i18n_strings))
+            strings.extend(i18n_strings)
 
-def update_i18n_json(json_file, standard_keys):
-    standard_keys = sorted(standard_keys)
-    print(f" Process {json_file} ".center(TITLE_LEN, "="))
-    # 读取 JSON 文件
-    with open(json_file, "r", encoding="utf-8") as f:
-        json_data = json.load(f, object_pairs_hook=OrderedDict)
-    # 打印处理前的 JSON 条目数
-    len_before = len(json_data)
-    print(f"{'Total Keys'.ljust(KEY_LEN)}: {len_before}")
-    # 识别缺失的键并补全
-    miss_keys = set(standard_keys) - set(json_data.keys())
-    if len(miss_keys) > 0:
-        print(f"{'Missing Keys (+)'.ljust(KEY_LEN)}: {len(miss_keys)}")
-        for key in miss_keys:
-            if DEFAULT_LANGUAGE in json_file:
-                # 默认语言的键值相同.
-                json_data[key] = key
-            else:
-                # 其他语言的值设置为 #! + 键名以标注未被翻译.
-                json_data[key] = "#!" + key
-            if SHOW_KEYS:
-                print(f"{'Added Missing Key'.ljust(KEY_LEN)}: {key}")
-    # 识别多余的键并删除
-    diff_keys = set(json_data.keys()) - set(standard_keys)
-    if len(diff_keys) > 0:
-        print(f"{'Unused Keys  (-)'.ljust(KEY_LEN)}: {len(diff_keys)}")    
-        for key in diff_keys:
-            del json_data[key]
-            if SHOW_KEYS:
-                print(f"{'Removed Unused Key'.ljust(KEY_LEN)}: {key}")
-    # 按键顺序排序
-    json_data = OrderedDict(
-        sorted(
-            json_data.items(),
-            key=lambda x: (
-                list(standard_keys).index(x[0]) if x[0] in standard_keys and not x[1].startswith('#!') else len(json_data),
-            )
-        )
-    )
-    # 打印处理后的 JSON 条目数
-    if len(miss_keys) != 0 or len(diff_keys) != 0:
-        print(f"{'Total Keys (After)'.ljust(KEY_LEN)}: {len(json_data)}")
-    # 识别有待翻译的键
-    num_miss_translation = 0
-    duplicate_items = {}
-    for key, value in json_data.items():
-        if value.startswith("#!"):
-            num_miss_translation += 1
-            if SHOW_KEYS:
-                print(f"{'Missing Translation'.ljust(KEY_LEN)}: {key}")
-        if value in duplicate_items:
-            duplicate_items[value].append(key)
-        else:
-            duplicate_items[value] = [key]
-    # 打印是否有重复的值
-    for value, keys in duplicate_items.items():
-        if len(keys) > 1:
-            print("\n".join([f"\033[31m{'[Failed] Duplicate Value'.ljust(KEY_LEN)}: {key} -> {value}\033[0m" for key in keys]))
+
+# scan the directory for all .py files (recursively)
+if scan_subfolders:
+    for folder in scan_list:
+        for dirpath, dirnames, filenames in os.walk(folder):
+            for filename in [f for f in filenames if f.endswith(".py")]:
+                scan_i18n_strings(os.path.join(dirpath, filename))
+else:
+    for folder in scan_list:
+        for filename in os.listdir(folder):
+            if filename.endswith(".py"):
+                scan_i18n_strings(os.path.join(folder, filename))
+        
+code_keys = set(strings)
+"""
+n_i18n.py
+gui_v1.py 26
+app.py 16
+infer-web.py 147
+scan_i18n.py 0
+i18n.py 0
+lib/train/process_ckpt.py 1
+"""
+print()
+print("Total unique:", len(code_keys))
+
+
+standard_file = os.path.join(locale_path, "zh_CN.json")
+try:
+    with open(standard_file, "r", encoding="utf-8") as f:
+        standard_data = json.load(f, object_pairs_hook=OrderedDict)
+    standard_keys = set(standard_data.keys())
+except FileNotFoundError:
+    standard_keys = set()
+# Define the standard file name
+unused_keys = standard_keys - code_keys
+print("Unused keys:", len(unused_keys))
+for unused_key in unused_keys:
+    print("\t", unused_key)
+
+missing_keys = code_keys - standard_keys
+print("Missing keys:", len(missing_keys))
+for missing_key in missing_keys:
+    print("\t", missing_key)
     
-    if num_miss_translation > 0:
-        print(f"\033[31m{'[Failed] Missing Translation'.ljust(KEY_LEN)}: {num_miss_translation}\033[0m")
-    else:
-        print(f"\033[32m[Passed] All Keys Translated\033[0m")
-    # 将处理后的结果写入 JSON 文件
-    with open(json_file, "w", encoding="utf-8") as f:
-        json.dump(json_data, f, ensure_ascii=False, indent=4, sort_keys=SORT_KEYS)
-        f.write("\n")
-    print(f" Updated {json_file} ".center(TITLE_LEN, "=") + '\n')
 
-if __name__ == "__main__":
-    code_keys = scan_i18n_strings()
-    for json_file in os.listdir(I18N_JSON_DIR):
-        if json_file.endswith(r".json"):
-            json_file = os.path.join(I18N_JSON_DIR, json_file)
-            update_i18n_json(json_file, code_keys)
+
+code_keys_dict = OrderedDict()
+for s in strings:
+    if s in special_words_to_keep:
+        code_keys_dict[s] = special_words_to_keep[s]
+    else:    
+        code_keys_dict[s] = s
+
+# write back
+os.makedirs(locale_path, exist_ok=True)
+with open(standard_file, "w", encoding="utf-8") as f:
+    json.dump(code_keys_dict, f, ensure_ascii=False, indent=4, sort_keys=True)
+    f.write("\n")
